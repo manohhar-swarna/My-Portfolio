@@ -1,0 +1,1207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>manohhar.sh — ai engineer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070809;
+    --bg-2:#0b0d0f;
+    --ink:#e8e6e1;
+    --dim:#6b7280;
+    --dim-2:#3a3f47;
+    --line:#1a1d21;
+    --accent: oklch(0.82 0.16 145);
+    --accent-dim: oklch(0.82 0.16 145 / 0.35);
+    --accent-glow: oklch(0.82 0.16 145 / 0.15);
+    --warn: oklch(0.82 0.16 75);
+    --danger: oklch(0.72 0.18 28);
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --intensity: 1;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-weight:400;-webkit-font-smoothing:antialiased}
+  body{overflow-x:hidden;min-height:100vh;line-height:1.55;font-size:14px;letter-spacing:0.01em}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--accent);color:#06100a}
+
+  /* global scanlines + grain */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:60;
+    background:repeating-linear-gradient(to bottom, transparent 0 2px, rgba(255,255,255,0.012) 2px 3px);
+    mix-blend-mode:overlay;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:61;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  }
+
+  /* ---------- chrome ---------- */
+  .chrome{
+    position:fixed;top:0;left:0;right:0;height:28px;z-index:50;
+    background:linear-gradient(to bottom, #0a0c0e, #070809);
+    border-bottom:1px solid var(--line);
+    display:flex;align-items:center;padding:0 12px;gap:14px;
+    font-size:11px;color:var(--dim);
+  }
+  .chrome .dots{display:flex;gap:6px}
+  .chrome .dot{width:10px;height:10px;border-radius:50%;background:#1a1d21;border:1px solid #22262b}
+  .chrome .dot:nth-child(1){background:#3a1f1f}
+  .chrome .dot:nth-child(2){background:#3a331f}
+  .chrome .dot:nth-child(3){background:#1f3a25}
+  .chrome .path{font-weight:500;color:#8a8f96}
+  .chrome .path .dir{color:var(--accent)}
+  .chrome .meta{margin-left:auto;display:flex;gap:18px}
+  .chrome .meta span{display:inline-flex;align-items:center;gap:6px}
+  .chrome .led{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+
+  /* ---------- side rails ---------- */
+  .rail{
+    position:fixed;top:28px;bottom:24px;width:44px;z-index:40;
+    border-right:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:18px;
+    font-size:10px;color:var(--dim);background:var(--bg);
+  }
+  .rail.left{left:0}
+  .rail.right{right:0;border-right:none;border-left:1px solid var(--line)}
+  .rail .vtext{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:0.3em;text-transform:uppercase;font-size:10px}
+  .rail .tick{width:12px;height:1px;background:var(--dim-2)}
+  .rail .num{color:#4a4f57;font-size:10px}
+  .rail .big{color:var(--accent);font-weight:500}
+
+  /* footer bar */
+  .statusbar{
+    position:fixed;bottom:0;left:0;right:0;height:24px;z-index:50;
+    border-top:1px solid var(--line);background:var(--bg-2);
+    display:flex;align-items:center;gap:18px;padding:0 14px;font-size:11px;color:var(--dim);
+  }
+  .statusbar .k{color:var(--accent)}
+  .statusbar .spacer{flex:1}
+  .statusbar .blink{animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* ---------- layout ---------- */
+  main{padding:28px 44px 24px 44px;position:relative;z-index:10}
+  section{position:relative;padding:80px 56px;border-bottom:1px solid var(--line)}
+  .section-head{
+    display:flex;align-items:baseline;gap:14px;margin-bottom:36px;
+    color:var(--dim);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;
+  }
+  .section-head .idx{color:var(--accent);font-weight:500}
+  .section-head .line{flex:1;height:1px;background:var(--line)}
+  .section-head .status{color:#4a4f57}
+
+  /* ---------- hero ---------- */
+  #hero{
+    min-height:calc(100vh - 52px);
+    padding:0;display:grid;grid-template-columns: 1.1fr 1fr;
+    border-bottom:1px solid var(--line);
+    position:relative;overflow:hidden;
+  }
+  #hero .left{padding:80px 56px;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:2}
+  #hero .right{position:relative;border-left:1px solid var(--line);overflow:hidden}
+  #hero canvas.neural{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  .prompt-line{color:var(--dim);font-size:12px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .prompt-line .pfx{color:var(--accent)}
+
+  .name-stack{
+    font-size: clamp(44px, 6.2vw, 88px);
+    font-weight:700;letter-spacing:-0.03em;line-height:0.95;
+    margin:18px 0 24px;
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .name-stack .l{display:block;position:relative;overflow:hidden}
+  .name-stack .l span{display:inline-block;transform:translateY(110%);transition:transform 900ms cubic-bezier(0.2,0.9,0.2,1)}
+  .name-stack.in .l span{transform:translateY(0)}
+  .name-stack .l:nth-child(2) span{transition-delay:80ms}
+  .name-stack .accent{color:var(--accent)}
+  .name-stack .cursor{
+    display:inline-block;width:0.5em;height:0.82em;background:var(--accent);
+    transform:translateY(0.06em);margin-left:6px;animation:blink 1s steps(1) infinite;
+  }
+
+  .subtag{
+    font-size:13px;color:var(--ink);opacity:0.85;max-width:560px;
+    border-left:2px solid var(--accent);padding:6px 14px;margin:18px 0 32px;
+    background:linear-gradient(to right, var(--accent-glow), transparent 70%);
+  }
+  .subtag .dim{color:var(--dim)}
+
+  .hero-meta{display:grid;grid-template-columns:repeat(3,auto);gap:28px 36px;margin-top:16px;font-size:12px}
+  .hero-meta .k{color:var(--dim);font-size:10px;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px}
+  .hero-meta .v{color:var(--ink);font-weight:500}
+  .hero-meta .v.accent{color:var(--accent)}
+
+  .hero-cta{display:flex;gap:12px;margin-top:40px;align-items:center;flex-wrap:wrap}
+  .btn{
+    font-family:var(--mono);font-size:12px;letter-spacing:0.1em;text-transform:uppercase;
+    padding:12px 18px;border:1px solid var(--line);color:var(--ink);background:transparent;
+    cursor:pointer;position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:10px;
+    transition:all 200ms ease;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent);transform:translate(-1px,-1px);box-shadow:3px 3px 0 0 var(--accent-dim)}
+  .btn .glyph{color:var(--accent);transition:transform 200ms}
+  .btn:hover .glyph{transform:translateX(2px)}
+  .btn.primary{background:var(--accent);color:#06100a;border-color:var(--accent);font-weight:500}
+  .btn.primary:hover{color:#06100a;box-shadow:3px 3px 0 0 rgba(232,230,225,0.2)}
+  .btn.primary .glyph{color:#06100a}
+
+  /* typewriter console inside hero */
+  .console{
+    margin-top:28px;font-size:12px;color:var(--dim);min-height:72px;
+    border-top:1px dashed var(--line);padding-top:14px;max-width:640px;
+  }
+  .console .row{display:flex;gap:10px;align-items:baseline}
+  .console .row .t{color:#4a4f57;min-width:52px}
+  .console .row .m{color:var(--ink);opacity:0.9}
+  .console .row .m.ok{color:var(--accent)}
+  .console .row .m.warn{color:var(--warn)}
+
+  /* right panel overlay */
+  #hero .right::before{
+    content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
+    background:
+      linear-gradient(to right, rgba(7,8,9,0.8) 0%, transparent 20%, transparent 80%, rgba(7,8,9,0.4) 100%),
+      linear-gradient(to bottom, rgba(7,8,9,0.5) 0%, transparent 20%, transparent 80%, rgba(7,8,9,0.9) 100%);
+  }
+  #hero .right .badge{
+    position:absolute;top:20px;right:20px;z-index:4;font-size:10px;color:var(--dim);
+    display:flex;align-items:center;gap:8px;letter-spacing:0.2em;text-transform:uppercase;
+  }
+  #hero .right .badge .led{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  #hero .right .caption{
+    position:absolute;left:20px;bottom:20px;z-index:4;font-size:10px;color:var(--dim);
+    letter-spacing:0.15em;text-transform:uppercase;max-width:260px;line-height:1.6;
+  }
+  #hero .right .caption b{color:var(--accent);font-weight:500}
+
+  /* coordinate ticks overlay */
+  #hero .right .ticks{
+    position:absolute;inset:0;z-index:2;pointer-events:none;
+    background-image:
+      linear-gradient(to right, var(--line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+    background-size: 80px 80px;
+    opacity:0.35;
+    mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+  }
+
+  /* ---------- scroll-driven 3d camera stack (about) ---------- */
+  .stage{
+    perspective: 1400px;
+    position:relative;
+    min-height: 120vh;
+  }
+  .layers{position:sticky;top:80px;height:82vh;transform-style:preserve-3d;perspective:1400px}
+  .layer{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    transform-style:preserve-3d;
+    will-change:transform,opacity;
+  }
+  .layer .panel{
+    border:1px solid var(--line);background:rgba(11,13,15,0.9);backdrop-filter:blur(2px);
+    padding:36px 44px;max-width:680px;width:90%;position:relative;
+  }
+  .layer .panel::before,.layer .panel::after{
+    content:"";position:absolute;width:14px;height:14px;border:1px solid var(--accent);
+  }
+  .layer .panel::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+  .layer .panel::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+  .layer .panel h2{font-size:14px;font-weight:500;color:var(--accent);margin:0 0 12px;letter-spacing:0.1em;text-transform:uppercase}
+  .layer .panel p{font-size:15px;line-height:1.7;color:var(--ink);opacity:0.92;margin:0 0 14px;text-wrap:pretty}
+  .layer .panel p .dim{color:var(--dim)}
+  .layer .panel p .accent{color:var(--accent)}
+  .layer .panel .kv{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;font-size:12px;margin-top:18px}
+  .layer .panel .kv .k{color:var(--dim)}
+  .layer .panel .tag{font-size:10px;color:var(--dim);letter-spacing:0.25em;text-transform:uppercase;margin-bottom:18px}
+
+  /* ---------- experience ---------- */
+  .exp{display:flex;flex-direction:column;gap:0;border:1px solid var(--line)}
+  .exp-item{
+    display:block;border-bottom:1px solid var(--line);position:relative;
+    opacity:0;transform:translateY(16px);transition:opacity 700ms ease, transform 700ms ease;
+  }
+  .exp-item:last-child{border-bottom:none}
+  .exp-item.in{opacity:1;transform:none}
+  .exp-item::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);
+    transform:scaleY(0);transform-origin:top;transition:transform 500ms ease;
+  }
+  .exp-item.in::before{transform:scaleY(1)}
+
+  .exp-head{
+    display:grid;grid-template-columns: 1.4fr 1fr 1.2fr;gap:0;
+    border-bottom:1px dashed var(--line);
+  }
+  .exp-head > div{padding:28px 32px}
+  .exp-head .ident{border-right:1px dashed var(--line)}
+  .exp-head .ident .co{font-size:28px;font-weight:700;letter-spacing:-0.02em;line-height:1.05;margin-bottom:6px}
+  .exp-head .ident .role{color:var(--accent);font-size:12px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:10px}
+  .exp-head .ident .loc{color:var(--dim);font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
+  .exp-head .period{border-right:1px dashed var(--line);display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .exp-head .period .k{font-size:10px;color:var(--dim);letter-spacing:0.2em;text-transform:uppercase}
+  .exp-head .period .v{font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:500}
+  .exp-head .period .dur{font-size:11px;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase}
+  .exp-head .tags{display:flex;flex-wrap:wrap;gap:6px;align-content:center;align-items:center}
+  .exp-head .tags span{font-size:10px;padding:4px 8px;border:1px solid var(--line);color:var(--dim);letter-spacing:0.05em}
+  .exp-head .tags span.p{border-color:var(--accent-dim);color:var(--accent)}
+
+  .exp-body{padding:28px 32px}
+  .exp-body ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:14px 40px}
+  .exp-body li{font-size:13.5px;line-height:1.7;color:var(--ink);opacity:0.92;position:relative;padding-left:22px;text-wrap:pretty}
+  .exp-body li::before{content:"→";position:absolute;left:0;top:0;color:var(--accent);font-weight:500}
+  .exp-body li .accent{color:var(--accent)}
+  .exp-body li .dim{color:var(--dim)}
+
+  @media (max-width:900px){
+    .exp-head{grid-template-columns:1fr}
+    .exp-head .ident,.exp-head .period{border-right:none;border-bottom:1px dashed var(--line)}
+    .exp-body ul{grid-template-columns:1fr}
+  }
+
+  /* ---------- projects ---------- */
+  .projects{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid var(--line)}
+  .proj{
+    position:relative;padding:32px 32px 28px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:var(--bg);transition:all 240ms ease;cursor:default;overflow:hidden;min-height:340px;
+    display:flex;flex-direction:column;
+  }
+  .proj:nth-child(2n){border-right:none}
+  .proj:nth-last-child(-n+2){border-bottom:none}
+  .proj::before{
+    content:"";position:absolute;left:0;top:0;width:3px;height:0;background:var(--accent);
+    transition:height 300ms ease;
+  }
+  .proj:hover::before{height:100%}
+  .proj:hover{background:rgba(255,255,255,0.015)}
+  .proj .meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;font-size:10px;color:var(--dim);letter-spacing:0.2em;text-transform:uppercase}
+  .proj .meta .id{color:var(--accent);font-weight:500}
+  .proj .meta .yr{font-variant-numeric:tabular-nums}
+  .proj h3{font-size:22px;font-weight:500;letter-spacing:-0.015em;margin:0 0 6px;line-height:1.15;color:var(--ink)}
+  .proj .sub{font-size:12px;color:var(--dim);margin-bottom:16px;letter-spacing:0.05em}
+  .proj p{font-size:13px;line-height:1.65;color:var(--ink);opacity:0.88;margin:0 0 18px;text-wrap:pretty}
+  .proj p .accent{color:var(--accent)}
+  .proj .stats{display:flex;gap:24px;margin-bottom:18px;border-top:1px dashed var(--line);padding-top:14px}
+  .proj .stats .st{display:flex;flex-direction:column;gap:2px}
+  .proj .stats .st .k{font-size:9px;color:var(--dim);letter-spacing:0.2em;text-transform:uppercase}
+  .proj .stats .st .v{font-size:16px;color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums}
+  .proj .stack{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+  .proj .stack span{font-size:10px;padding:3px 7px;border:1px solid var(--line);color:var(--dim);letter-spacing:0.05em}
+  .proj .stack span.p{border-color:var(--accent-dim);color:var(--accent)}
+  .proj .ascii{
+    position:absolute;right:20px;top:20px;font-size:9px;line-height:1.1;color:var(--dim-2);
+    white-space:pre;opacity:0.55;pointer-events:none;font-family:var(--mono);
+    transition:color 300ms;
+  }
+  .proj:hover .ascii{color:var(--accent-dim)}
+  @media (max-width:900px){
+    .projects{grid-template-columns:1fr}
+    .proj{border-right:none !important;border-bottom:1px solid var(--line) !important}
+    .proj:last-child{border-bottom:none !important}
+  }
+
+  /* ---------- skills matrix ---------- */
+  .skills{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line)}
+  .skillcell{
+    border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    padding:22px 22px 18px;position:relative;min-height:160px;
+    background:var(--bg);transition:background 200ms;
+  }
+  .skillcell:nth-child(4n){border-right:none}
+  .skillcell:hover{background:rgba(255,255,255,0.02)}
+  .skillcell:hover::after{
+    content:"";position:absolute;inset:0;border:1px solid var(--accent);pointer-events:none;
+  }
+  .skillcell .cat{font-size:10px;color:var(--dim);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px}
+  .skillcell .num{font-size:10px;color:#4a4f57;font-variant-numeric:tabular-nums}
+  .skillcell .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+  .skillcell .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .skillcell .chip{
+    font-size:11px;padding:4px 8px;border:1px solid var(--line);color:var(--ink);
+    opacity:0.85;transition:all 150ms;cursor:default;
+  }
+  .skillcell .chip:hover{border-color:var(--accent);color:var(--accent);opacity:1}
+  .skillcell .chip.primary{border-color:var(--accent-dim);color:var(--accent)}
+
+  /* ---------- education / contact ---------- */
+  .edu{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line)}
+  .edu > div{padding:32px;border-right:1px solid var(--line)}
+  .edu > div:last-child{border-right:none}
+  .edu .yr{color:var(--accent);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:8px}
+  .edu .deg{font-size:22px;font-weight:500;letter-spacing:-0.01em;margin-bottom:4px}
+  .edu .sch{color:var(--dim);font-size:13px}
+
+  .contact{
+    display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;
+  }
+  .contact .big{
+    font-size:clamp(42px, 5.2vw, 76px);font-weight:700;letter-spacing:-0.03em;line-height:1;
+  }
+  .contact .big .accent{color:var(--accent)}
+  .contact .big .cursor{display:inline-block;width:0.5em;height:0.82em;background:var(--accent);transform:translateY(0.08em);margin-left:6px;animation:blink 1s steps(1) infinite}
+  .contact .ways{display:flex;flex-direction:column;gap:0;border:1px solid var(--line)}
+  .contact .way{
+    padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;
+    font-size:13px;transition:all 200ms;cursor:pointer;
+  }
+  .contact .way:last-child{border-bottom:none}
+  .contact .way:hover{background:var(--accent);color:#06100a}
+  .contact .way:hover .glyph{color:#06100a}
+  .contact .way .k{color:var(--dim);font-size:10px;letter-spacing:0.2em;text-transform:uppercase;margin-right:24px;min-width:80px;display:inline-block}
+  .contact .way:hover .k{color:rgba(6,16,10,0.7)}
+  .contact .way .glyph{color:var(--accent);font-size:16px}
+
+  /* boot overlay */
+  #boot{
+    position:fixed;inset:0;z-index:100;background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+    transition:opacity 400ms ease 200ms, visibility 400ms 600ms;
+  }
+  #boot.done{opacity:0;visibility:hidden;pointer-events:none}
+  #boot .bootbox{font-size:12px;color:var(--ink);width:min(620px,86vw);line-height:1.8}
+  #boot .bootbox .row{display:flex;gap:10px}
+  #boot .bootbox .row .t{color:var(--dim);min-width:56px}
+  #boot .bootbox .row .ok{color:var(--accent)}
+  #boot .bootbox .row .warn{color:var(--warn)}
+  #boot .bootbox .bar{height:4px;background:var(--line);margin-top:18px;overflow:hidden}
+  #boot .bootbox .bar span{display:block;height:100%;background:var(--accent);width:0}
+
+  /* ---------- tweaks ---------- */
+  #tweaks{
+    position:fixed;right:60px;bottom:40px;z-index:55;
+    background:var(--bg-2);border:1px solid var(--line);width:260px;font-size:11px;
+    display:none;
+  }
+  #tweaks.on{display:block}
+  #tweaks .th{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--dim);letter-spacing:0.2em;text-transform:uppercase;display:flex;justify-content:space-between}
+  #tweaks .th .k{color:var(--accent)}
+  #tweaks .row{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+  #tweaks .row:last-child{border-bottom:none}
+  #tweaks .row label{color:var(--dim);font-size:10px;letter-spacing:0.15em;text-transform:uppercase}
+  #tweaks .swatches{display:flex;gap:6px}
+  #tweaks .sw{width:18px;height:18px;border:1px solid var(--line);cursor:pointer;position:relative}
+  #tweaks .sw.on{outline:1px solid var(--ink);outline-offset:2px}
+  #tweaks select,#tweaks input[type=range]{background:transparent;color:var(--ink);border:1px solid var(--line);font-family:var(--mono);font-size:11px;padding:4px 6px}
+
+  /* hide default scrollbar thumb style */
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:var(--line)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--dim-2)}
+
+  /* reveal */
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity 900ms cubic-bezier(0.2,0.9,0.2,1),transform 900ms cubic-bezier(0.2,0.9,0.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  .reveal.d2{transition-delay:120ms}
+  .reveal.d3{transition-delay:240ms}
+  .reveal.d4{transition-delay:360ms}
+
+  /* misc accents */
+  .tag{
+    display:inline-flex;gap:6px;align-items:center;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--dim);
+  }
+  .tag .d{width:6px;height:6px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+
+  @media (max-width:900px){
+    #hero{grid-template-columns:1fr}
+    #hero .right{min-height:60vh;border-left:none;border-top:1px solid var(--line)}
+    .exp-grid{grid-template-columns:1fr}
+    .exp-row .when,.exp-row .where{border-right:none}
+    .skills{grid-template-columns:repeat(2,1fr)}
+    .skillcell:nth-child(4n){border-right:1px solid var(--line)}
+    .skillcell:nth-child(2n){border-right:none}
+    .contact{grid-template-columns:1fr;gap:28px}
+    .edu{grid-template-columns:1fr}
+    .edu > div{border-right:none;border-bottom:1px solid var(--line)}
+    .edu > div:last-child{border-bottom:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- boot overlay -->
+<div id="boot" data-screen-label="Boot Sequence">
+  <div class="bootbox">
+    <div class="row"><span class="t">[ OK ]</span><span>Mounting portfolio:// at /dev/web</span></div>
+    <div class="row"><span class="t">[ OK ]</span><span>Loading <span style="color:var(--accent)">manohhar.profile</span> …</span></div>
+    <div class="row"><span class="t">[ OK ]</span><span>Initializing scroll camera v0.4.1</span></div>
+    <div class="row"><span class="t">[ OK ]</span><span>Spawning 96 neural nodes …</span></div>
+    <div class="row"><span class="t">[..] </span><span>Warming up graph …</span></div>
+    <div class="bar"><span id="bootbar"></span></div>
+  </div>
+</div>
+
+<!-- top chrome -->
+<div class="chrome">
+  <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  <div class="path">~/<span class="dir">portfolio</span>/manohhar.sh</div>
+  <div class="meta">
+    <span><span class="led"></span> online</span>
+    <span>lat: 38.9°N · 94.7°W</span>
+    <span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- side rails -->
+<div class="rail left">
+  <div class="vtext">// manohhar swarna</div>
+  <div class="tick"></div>
+  <div class="num">00</div>
+  <div class="num">01</div>
+  <div class="num big" id="rail-sec">01</div>
+  <div class="num">03</div>
+  <div class="num">04</div>
+  <div class="num">05</div>
+  <div class="tick"></div>
+  <div class="vtext">// v2026.04</div>
+</div>
+<div class="rail right">
+  <div class="vtext">// ai engineer · 4+ yrs</div>
+  <div class="tick"></div>
+  <div class="num" id="scrollpct">0%</div>
+  <div class="tick"></div>
+  <div class="vtext">// scroll ↓</div>
+</div>
+
+<main>
+
+<!-- ============== HERO ============== -->
+<section id="hero" data-screen-label="01 Hero" data-idx="01">
+  <div class="left">
+    <div class="prompt-line"><span class="pfx">$</span> whoami <span style="color:var(--dim-2)">──────</span></div>
+    <div class="name-stack" id="namestack">
+      <span class="l"><span>MANOHHAR</span></span>
+      <span class="l"><span>SWARNA<span class="cursor"></span></span></span>
+    </div>
+    <div class="subtag">
+      <span class="dim">&gt;</span> AI/ML engineer shipping <span style="color:var(--accent)">LLM-powered agents</span>, RAG systems & MLOps pipelines.
+      <span class="dim">Currently at Voiceflow.</span>
+    </div>
+
+    <div class="hero-meta">
+      <div><div class="k">role</div><div class="v">AI / ML Engineer</div></div>
+      <div><div class="k">exp</div><div class="v accent">4+ yrs</div></div>
+      <div><div class="k">location</div><div class="v">USA · remote</div></div>
+      <div><div class="k">stack</div><div class="v">Python · LangChain</div></div>
+      <div><div class="k">cloud</div><div class="v">AWS · GCP</div></div>
+      <div><div class="k">status</div><div class="v accent">available</div></div>
+    </div>
+
+    <div class="hero-cta">
+      <button class="btn primary" onclick="document.getElementById('contact').scrollIntoView({behavior:'smooth'})">
+        <span>get in touch</span><span class="glyph">→</span>
+      </button>
+      <button class="btn" onclick="document.getElementById('experience').scrollIntoView({behavior:'smooth'})">
+        <span>view work</span><span class="glyph">↓</span>
+      </button>
+      <button class="btn"><span>cv.pdf</span><span class="glyph">⇣</span></button>
+    </div>
+
+    <div class="console" id="console">
+      <div class="row"><span class="t">[boot]</span><span class="m">waking graph · 96 nodes · 180 edges</span></div>
+      <div class="row"><span class="t">[ok]</span><span class="m ok">cursor-reactive field online</span></div>
+      <div class="row"><span class="t">[hint]</span><span class="m">move your cursor on the right →</span></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <canvas class="neural" id="neural"></canvas>
+    <div class="ticks"></div>
+    <div class="badge"><span class="led"></span><span>graph.live</span></div>
+    <div class="caption">
+      <b>neural.field</b><br/>
+      interactive · 96 nodes · force-directed<br/>
+      <span style="color:#4a4f57">drag cursor to perturb</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============== ABOUT: scroll-driven 3D camera ============== -->
+<section id="about" class="stage" data-screen-label="02 About" data-idx="02">
+  <div class="section-head">
+    <span class="idx">02</span><span>// about</span><span class="line"></span><span class="status">depth.camera ∎</span>
+  </div>
+
+  <div class="layers" id="aboutLayers">
+    <div class="layer" data-z="0">
+      <div class="panel">
+        <div class="tag">file · about.md</div>
+        <h2>// profile</h2>
+        <p>AI/ML engineer with <span class="accent">four-plus years</span> building and deploying
+        AI-driven systems across <span class="accent">machine learning</span>, <span class="accent">deep learning</span>,
+        <span class="accent">NLP</span> and <span class="accent">generative AI</span>.</p>
+        <p><span class="dim">Currently shipping</span> production agents and RAG retrieval at Voiceflow —
+        conversation orchestrators, session continuity, citation-backed responses.</p>
+        <div class="kv">
+          <div class="k">focus</div><div>AI agents · RAG · fine-tuning (LoRA / QLoRA)</div>
+          <div class="k">ship</div><div>microservices · FastAPI · Redis · Pinecone</div>
+          <div class="k">care</div><div>traceability, evals, latency budgets</div>
+        </div>
+      </div>
+    </div>
+    <div class="layer" data-z="-200">
+      <div class="panel">
+        <div class="tag">camera · depth −200</div>
+        <h2>// what i build</h2>
+        <p>End-to-end ML lifecycle — <span class="accent">data → model → deploy → MLOps</span>.
+        Agentic systems with <span class="accent">CrewAI</span> + <span class="accent">LangChain</span>,
+        retrieval with <span class="accent">Pinecone / FAISS / pgvector</span>,
+        serving on <span class="accent">AWS SageMaker</span> behind <span class="accent">CI/CD</span>.</p>
+      </div>
+    </div>
+    <div class="layer" data-z="-400">
+      <div class="panel">
+        <div class="tag">camera · depth −400</div>
+        <h2>// how i work</h2>
+        <p>Prefer small, testable units. Log-first debugging. Chunking &amp; search-tuning
+        over prompt-stuffing. <span class="accent">Citations &gt; confidence.</span> Ship, measure, revise.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== EXPERIENCE ============== -->
+<section id="experience" data-screen-label="03 Experience" data-idx="03">
+  <div class="section-head">
+    <span class="idx">03</span><span>// experience.log</span><span class="line"></span><span class="status">2 entries</span>
+  </div>
+
+  <div class="exp">
+
+    <div class="exp-item reveal">
+      <div class="exp-head">
+        <div class="ident">
+          <div class="co">Voiceflow</div>
+          <div class="role">AI / Machine Learning Engineer</div>
+          <div class="loc">Remote · USA</div>
+        </div>
+        <div class="period">
+          <div><span class="k">period</span></div>
+          <div class="v">Oct 2024 — Present</div>
+          <div class="dur">1.5 yrs · current</div>
+        </div>
+        <div class="tags">
+          <span class="p">LangChain</span><span class="p">RAG</span><span class="p">Pinecone</span>
+          <span>FastAPI</span><span>Redis</span><span>AWS</span><span>Microservices</span>
+        </div>
+      </div>
+      <div class="exp-body">
+        <ul>
+          <li>Shipped tickets on a <span class="accent">tier-1 AI customer-support Conversation Orchestrator</span> (LangChain · FastAPI · Redis) — improving flow handling, session continuity &amp; multi-turn reliability.</li>
+          <li>Maintained <span class="accent">Redis session context</span> (r/w, expiry, LRU caching) to preserve state across agent runtime; reduced cross-turn context loss in regression suite.</li>
+          <li>Tuned the <span class="accent">RAG retrieval service</span> on Pinecone — chunking strategy, hybrid search, metadata filtering &amp; per-tenant namespaces so answers come from the right knowledge source.</li>
+          <li>Enabled <span class="accent">citation / source attachment</span> in RAG outputs via LangChain + vector search results, improving traceability for internal QA and end-user trust.</li>
+          <li>Added <span class="accent">guardrails &amp; fallback logic</span> for LLM timeouts, malformed tool calls &amp; token-budget overruns — smoother graceful degradation under load.</li>
+          <li>Wrote <span class="accent">eval harnesses</span> (retrieval precision @k, answer faithfulness) wired into CI to catch regressions before prod rollout.</li>
+          <li>Collaborated across backend, data &amp; PM in a microservices env — scoped tickets in Jira, drove code reviews, shipped behind feature flags.</li>
+          <li>On-call production support: log triage, API error/timeout debugging, regression validation &amp; post-incident write-ups.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="exp-item reveal">
+      <div class="exp-head">
+        <div class="ident">
+          <div class="co">Applied Materials</div>
+          <div class="role">Machine Learning Engineer</div>
+          <div class="loc">India</div>
+        </div>
+        <div class="period">
+          <div><span class="k">period</span></div>
+          <div class="v">Oct 2019 — Jun 2022</div>
+          <div class="dur">2.8 yrs · full-time</div>
+        </div>
+        <div class="tags">
+          <span class="p">Python</span><span class="p">NLP</span><span class="p">NLTK</span>
+          <span>spaCy</span><span>Automation</span><span>MLOps</span><span>Monitoring</span>
+        </div>
+      </div>
+      <div class="exp-body">
+        <ul>
+          <li>Built <span class="accent">NLP preprocessing pipelines</span> with Python &amp; NLTK — tokenization, cleaning, stopword filtering, lemmatization — lifting downstream model input quality.</li>
+          <li>Owned <span class="accent">feature &amp; embedding prep</span> through NLP pipelines (TF-IDF, word2vec, early transformer embeddings) to improve text representation for training &amp; inference.</li>
+          <li>Supported model deployment &amp; runtime tuning via Python scripts and config — <span class="accent">reduced ticket reassignments</span> and smoothed the internal support flow.</li>
+          <li>Developed <span class="accent">Python automation</span> for cross-server data migration — repeatable runs, fewer manual errors, audit-friendly logs.</li>
+          <li>Shipped lightweight <span class="accent">monitoring utilities</span> parsing logs &amp; metrics to track <span class="dim">memory usage, memory spilling &amp; JVM pause time</span>.</li>
+          <li>Production troubleshooting: root-cause analysis on logs/metrics, coordinated fixes — contributed to measurable stability &amp; reliability gains.</li>
+          <li>Mentored junior engineers on Python, NLP fundamentals &amp; debugging hygiene.</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============== PROJECTS ============== -->
+<section id="projects" data-screen-label="04 Projects" data-idx="04">
+  <div class="section-head">
+    <span class="idx">04</span><span>// projects.git</span><span class="line"></span><span class="status">3 repos · recent</span>
+  </div>
+
+  <div class="projects">
+
+    <div class="proj reveal">
+      <div class="ascii">┌──┐
+│▓▓│
+└──┘</div>
+      <div class="meta"><span class="id">PRJ-001</span><span class="yr">2025</span></div>
+      <h3><a href="https://github.com/manohhar-swarna/Banking-AI-Chatbot" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-dim)">agentic-banking-chatbot</a></h3>
+      <div class="sub">// agent-based banking chatbot w/ dynamic tool invocation</div>
+      <p>Built with <span class="accent">LangChain</span> &amp; <span class="accent">GPT-4o</span> — model dynamically selects and invokes tools (SQLite database, external APIs, web search) based on user queries. Stateful multi-turn conversations stored in SQLite with modular components for chat orchestration, tool execution &amp; schema validation. Structured logging &amp; custom exception handling for reliability &amp; traceability.</p>
+      <div class="stats">
+        <div class="st"><span class="k">tools</span><span class="v">3</span></div>
+        <div class="st"><span class="k">memory</span><span class="v">SQLite</span></div>
+        <div class="st"><span class="k">pattern</span><span class="v">agentic</span></div>
+      </div>
+      <div class="stack"><span class="p">LangChain</span><span class="p">GPT-4o</span><span>SQLite</span><span>Python</span></div>
+    </div>
+
+    <div class="proj reveal d2">
+      <div class="ascii">◆─◆
+│ │
+◆─◆</div>
+      <div class="meta"><span class="id">PRJ-002</span><span class="yr">2025</span></div>
+      <h3><a href="https://github.com/manohhar-swarna/MCP-AI-Agent" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-dim)">mcp-agentic-banking-chatbot</a></h3>
+      <div class="sub">// MCP server/client architecture w/ decoupled tool execution</div>
+      <p>Tools decoupled and exposed via a <span class="accent">Model Context Protocol (MCP)</span> server over HTTP — dynamic tool discovery through an MCP client instead of hardcoded integrations. Async architecture (<span class="accent">async/await</span> + aiosqlite) for stateful multi-turn memory. Modular client–server system with distributed tool execution (DB, CSV, APIs, web search). Scalable &amp; production-ready.</p>
+      <div class="stats">
+        <div class="st"><span class="k">tools</span><span class="v">4</span></div>
+        <div class="st"><span class="k">protocol</span><span class="v">MCP</span></div>
+        <div class="st"><span class="k">arch</span><span class="v">async</span></div>
+      </div>
+      <div class="stack"><span class="p">LangChain</span><span class="p">MCP</span><span>GPT-4o</span><span>aiosqlite</span><span>Python</span></div>
+    </div>
+
+    <div class="proj reveal">
+      <div class="ascii">╱╲╱╲
+╲╱╲╱
+╱╲╱╲</div>
+      <div class="meta"><span class="id">PRJ-003</span><span class="yr">2025</span></div>
+      <h3><a href="https://github.com/manohhar-swarna/RAG_Agent-resume-chatbot" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--accent-dim)">rag-resume-assistant</a></h3>
+      <div class="sub">// RAG chatbot grounded in resume data</div>
+      <p>RAG chatbot using <span class="accent">LangChain</span> &amp; <span class="accent">ChromaDB</span> to answer queries grounded in resume data. End-to-end pipeline: PDF parsing → text chunking → embedding generation → similarity-based <span class="accent">Top-K retrieval</span> → LLM response construction. Persistent vector storage, modular architecture, structured logging &amp; exception handling for consistent performance.</p>
+      <div class="stats">
+        <div class="st"><span class="k">retrieval</span><span class="v">Top-K</span></div>
+        <div class="st"><span class="k">store</span><span class="v">ChromaDB</span></div>
+        <div class="st"><span class="k">pipeline</span><span class="v">E2E</span></div>
+      </div>
+      <div class="stack"><span class="p">LangChain</span><span class="p">ChromaDB</span><span>RAG</span><span>Python</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============== SKILLS ============== -->
+<section id="skills" data-screen-label="05 Skills" data-idx="05">
+  <div class="section-head">
+    <span class="idx">05</span><span>// stack.matrix</span><span class="line"></span><span class="status">6 clusters</span>
+  </div>
+
+  <div class="skills">
+    <div class="skillcell reveal">
+      <div class="head"><span class="cat">Generative AI</span><span class="num">01 · primary</span></div>
+      <div class="chips">
+        <span class="chip primary">LangChain</span><span class="chip primary">CrewAI</span>
+        <span class="chip primary">RAG</span><span class="chip primary">LoRA</span>
+        <span class="chip">QLoRA</span><span class="chip">HuggingFace</span>
+        <span class="chip">OpenAI</span><span class="chip">AI Agents</span>
+      </div>
+    </div>
+
+    <div class="skillcell reveal d2">
+      <div class="head"><span class="cat">ML / DL</span><span class="num">02</span></div>
+      <div class="chips">
+        <span class="chip">Transformers</span><span class="chip">CNN</span>
+        <span class="chip">RNN</span><span class="chip">LSTM</span>
+        <span class="chip">XGBoost</span><span class="chip">Random Forest</span>
+        <span class="chip">SVM</span><span class="chip">PCA</span>
+      </div>
+    </div>
+
+    <div class="skillcell reveal d3">
+      <div class="head"><span class="cat">Cloud · DevOps</span><span class="num">03</span></div>
+      <div class="chips">
+        <span class="chip primary">AWS</span><span class="chip">SageMaker</span>
+        <span class="chip">Lambda</span><span class="chip">EC2</span>
+        <span class="chip">Docker</span><span class="chip">Kubernetes</span>
+        <span class="chip">CI/CD</span><span class="chip">GCP</span>
+      </div>
+    </div>
+
+    <div class="skillcell reveal d4">
+      <div class="head"><span class="cat">Vector DBs</span><span class="num">04</span></div>
+      <div class="chips">
+        <span class="chip primary">Pinecone</span><span class="chip primary">FAISS</span>
+        <span class="chip">Chroma</span><span class="chip">pgvector</span>
+      </div>
+    </div>
+
+    <div class="skillcell reveal">
+      <div class="head"><span class="cat">Languages · Libs</span><span class="num">05</span></div>
+      <div class="chips">
+        <span class="chip primary">Python</span><span class="chip">SQL</span>
+        <span class="chip">NumPy</span><span class="chip">Pandas</span>
+        <span class="chip">scikit-learn</span><span class="chip">TensorFlow</span>
+        <span class="chip">Keras</span><span class="chip">spaCy</span>
+        <span class="chip">NLTK</span><span class="chip">Flask</span>
+        <span class="chip">FastAPI</span><span class="chip">boto3</span>
+      </div>
+    </div>
+
+    <div class="skillcell reveal d2">
+      <div class="head"><span class="cat">Tools</span><span class="num">06</span></div>
+      <div class="chips">
+        <span class="chip">Git</span><span class="chip">GitHub</span>
+        <span class="chip">Jira</span><span class="chip">Trello</span>
+        <span class="chip">Scrum</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== EDUCATION ============== -->
+<section id="education" data-screen-label="06 Education" data-idx="06">
+  <div class="section-head">
+    <span class="idx">06</span><span>// education</span><span class="line"></span><span class="status">M.S. · B.Tech</span>
+  </div>
+
+  <div class="edu">
+    <div class="reveal">
+      <div class="yr">2022 — 2023</div>
+      <div class="deg">M.S. Computer Science</div>
+      <div class="sch">University of Central Missouri · USA</div>
+    </div>
+    <div class="reveal d2">
+      <div class="yr">2015 — 2019</div>
+      <div class="deg">B.Tech Computer Science</div>
+      <div class="sch">Acharya Nagarjuna University · India</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CONTACT ============== -->
+<section id="contact" data-screen-label="07 Contact" data-idx="07">
+  <div class="section-head">
+    <span class="idx">07</span><span>// ./connect.sh</span><span class="line"></span><span class="status">open</span>
+  </div>
+
+  <div class="contact">
+    <div class="reveal">
+      <div class="tag"><span class="d"></span> let's build something</div>
+      <div class="big" style="margin-top:18px">
+        got a model<br/>to ship?<br/><span class="accent">run it.<span class="cursor"></span></span>
+      </div>
+      <p style="color:var(--dim);max-width:460px;margin-top:22px;font-size:13px;line-height:1.7">
+        Open to AI/ML engineering roles, contract work on RAG systems, and agentic prototypes.
+        Reply-time usually under 24 hours.
+      </p>
+    </div>
+
+    <div class="ways reveal d2">
+      <a class="way" href="mailto:manohhar.ss11@gmail.com">
+        <span><span class="k">email</span>manohhar.ss11@gmail.com</span>
+        <span class="glyph">→</span>
+      </a>
+      <a class="way" href="tel:+19135358611">
+        <span><span class="k">phone</span>+1 (913) 535-8611</span>
+        <span class="glyph">→</span>
+      </a>
+      <a class="way" href="#">
+        <span><span class="k">linkedin</span>/in/manohhar-swarna</span>
+        <span class="glyph">→</span>
+      </a>
+      <a class="way" href="#">
+        <span><span class="k">github</span>@manohhar</span>
+        <span class="glyph">→</span>
+      </a>
+      <a class="way" href="#">
+        <span><span class="k">cv</span>download · pdf</span>
+        <span class="glyph">⇣</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- footer status bar -->
+<div class="statusbar">
+  <span><span class="k">NORMAL</span></span>
+  <span>portfolio.html</span>
+  <span>utf-8 · unix</span>
+  <span class="spacer"></span>
+  <span id="curSection">§ 01 hero</span>
+  <span id="cursor-pos">0, 0</span>
+  <span><span class="blink">_</span></span>
+</div>
+
+<!-- tweaks -->
+<div id="tweaks">
+  <div class="th"><span>// TWEAKS</span><span class="k">●</span></div>
+  <div class="row">
+    <label>accent</label>
+    <div class="swatches" id="swatches">
+      <div class="sw on" data-h="145" style="background:oklch(0.82 0.16 145)"></div>
+      <div class="sw" data-h="75" style="background:oklch(0.82 0.16 75)"></div>
+      <div class="sw" data-h="28" style="background:oklch(0.82 0.16 28)"></div>
+      <div class="sw" data-h="260" style="background:oklch(0.82 0.16 260)"></div>
+      <div class="sw" data-h="320" style="background:oklch(0.82 0.16 320)"></div>
+    </div>
+  </div>
+  <div class="row">
+    <label>motion</label>
+    <select id="motionSel">
+      <option value="1">dialed to 11</option>
+      <option value="0.6">heavy</option>
+      <option value="0.3">moderate</option>
+      <option value="0">off</option>
+    </select>
+  </div>
+  <div class="row">
+    <label>scanlines</label>
+    <select id="scanSel">
+      <option value="on">on</option>
+      <option value="off">off</option>
+    </select>
+  </div>
+</div>
+
+<script>
+// tweak defaults
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentHue": 145,
+  "motion": 1,
+  "scanlines": "on"
+}/*EDITMODE-END*/;
+
+let state = {...TWEAK_DEFAULTS};
+
+function applyState(){
+  document.documentElement.style.setProperty('--accent', `oklch(0.82 0.16 ${state.accentHue})`);
+  document.documentElement.style.setProperty('--accent-dim', `oklch(0.82 0.16 ${state.accentHue} / 0.35)`);
+  document.documentElement.style.setProperty('--accent-glow', `oklch(0.82 0.16 ${state.accentHue} / 0.15)`);
+  document.documentElement.style.setProperty('--intensity', state.motion);
+  document.body.style.setProperty('--scan-display', state.scanlines === 'on' ? 'block' : 'none');
+  // update scanlines visibility
+  const styleId = 'scan-toggle-style';
+  let st = document.getElementById(styleId);
+  if(!st){ st = document.createElement('style'); st.id = styleId; document.head.appendChild(st); }
+  st.textContent = state.scanlines === 'off' ? 'body::before{display:none!important}' : '';
+}
+applyState();
+
+// ------ boot sequence ------
+(function boot(){
+  const bar = document.getElementById('bootbar');
+  let p = 0;
+  const iv = setInterval(()=>{
+    p += 4 + Math.random()*10;
+    if(p>=100){ p=100; clearInterval(iv); finish(); }
+    bar.style.width = p+'%';
+  }, 45);
+  function finish(){
+    setTimeout(()=>{
+      document.getElementById('boot').classList.add('done');
+      document.getElementById('namestack').classList.add('in');
+    }, 150);
+  }
+})();
+
+// ------ clock ------
+(function(){
+  const el = document.getElementById('clock');
+  function tick(){
+    const d = new Date();
+    el.textContent = d.toTimeString().slice(0,8) + ' CDT';
+  }
+  tick(); setInterval(tick, 1000);
+})();
+
+// ------ reveals ------
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      const target = e.target.dataset.revealFor
+        ? document.getElementById(e.target.dataset.revealFor)
+        : e.target;
+      target.classList.add('in');
+    }
+  });
+}, {threshold: 0.1, rootMargin: '0px 0px -10% 0px'});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+// exp-rows use display:contents so observe their first child as a proxy
+document.querySelectorAll('.exp-row').forEach((row,i)=>{
+  row.id = row.id || ('exp-row-'+i);
+  const proxy = row.firstElementChild;
+  if(proxy){
+    proxy.setAttribute('data-reveal-for', row.id);
+    io.observe(proxy);
+  }
+});
+// safety fallback: if nothing observed after 2s, force visible
+setTimeout(()=>{
+  document.querySelectorAll('.reveal:not(.in), .exp-row:not(.in)').forEach(el=>{
+    const r = el.getBoundingClientRect();
+    if(r.top < window.innerHeight) el.classList.add('in');
+  });
+}, 2000);
+
+// ------ section tracking ------
+const sections = [...document.querySelectorAll('main > section')];
+const labels = ['01 hero','02 about','03 experience','04 projects','05 skills','06 education','07 contact'];
+window.addEventListener('scroll', ()=>{
+  const y = window.scrollY;
+  const h = document.body.scrollHeight - window.innerHeight;
+  const pct = Math.min(100, Math.max(0, (y/h)*100));
+  document.getElementById('scrollpct').textContent = pct.toFixed(0)+'%';
+  let idx = 0;
+  for(let i=0;i<sections.length;i++){
+    const r = sections[i].getBoundingClientRect();
+    if(r.top < window.innerHeight*0.4) idx = i;
+  }
+  document.getElementById('curSection').textContent = '§ ' + labels[idx];
+  document.getElementById('rail-sec').textContent = String(idx+1).padStart(2,'0');
+  // scroll camera
+  cameraScroll();
+}, {passive:true});
+
+// ------ scroll-driven 3d camera for about layers ------
+function cameraScroll(){
+  const stage = document.getElementById('about');
+  if(!stage) return;
+  const r = stage.getBoundingClientRect();
+  const h = window.innerHeight;
+  // progress 0..1 through stage
+  const p = Math.max(0, Math.min(1, (h - r.top) / (r.height + h)));
+  const layers = document.querySelectorAll('#aboutLayers .layer');
+  layers.forEach((layer, i)=>{
+    const baseZ = parseFloat(layer.dataset.z);
+    // camera moves -600 over stage
+    const camZ = p * 800;
+    const z = baseZ + camZ;
+    // fade out when far behind or too close
+    const distance = Math.abs(z);
+    const opacity = z > 0 ? Math.max(0, 1 - (z/500)) : Math.max(0, 1 - (distance/400));
+    const scale = 1 + (z * 0.0006);
+    layer.style.transform = `translateZ(${z}px) scale(${scale})`;
+    layer.style.opacity = opacity;
+    layer.style.filter = `blur(${Math.min(8, distance/120)}px)`;
+  });
+}
+cameraScroll();
+
+// ------ NEURAL GRAPH (cursor-reactive) ------
+(function(){
+  const canvas = document.getElementById('neural');
+  const ctx = canvas.getContext('2d');
+  let w,h,dpr;
+  let nodes = [];
+  let mouse = {x:-9999,y:-9999,active:false};
+  const N = 96;
+  const LINK_DIST = 140;
+
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    w = rect.width; h = rect.height;
+    canvas.width = w*dpr; canvas.height = h*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function init(){
+    resize();
+    nodes = [];
+    for(let i=0;i<N;i++){
+      nodes.push({
+        x: Math.random()*w,
+        y: Math.random()*h,
+        vx: (Math.random()-0.5)*0.3,
+        vy: (Math.random()-0.5)*0.3,
+        r: Math.random()<0.15 ? 2.6 : 1.4,
+        pulse: Math.random()*Math.PI*2,
+        hub: Math.random()<0.15,
+      });
+    }
+  }
+  window.addEventListener('resize', init);
+
+  canvas.addEventListener('mousemove', e=>{
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - r.left;
+    mouse.y = e.clientY - r.top;
+    mouse.active = true;
+    document.getElementById('cursor-pos').textContent = `${mouse.x.toFixed(0)}, ${mouse.y.toFixed(0)}`;
+  });
+  canvas.addEventListener('mouseleave', ()=>{ mouse.active = false; mouse.x=-9999; mouse.y=-9999; });
+
+  function getAccent(){
+    const root = getComputedStyle(document.documentElement);
+    return root.getPropertyValue('--accent').trim() || '#6ad67a';
+  }
+
+  function tick(t){
+    const intensity = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--intensity')) || 1;
+    ctx.clearRect(0,0,w,h);
+    // background subtle gradient-free dark; draw crosshair at cursor
+    if(mouse.active){
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0,mouse.y); ctx.lineTo(w,mouse.y);
+      ctx.moveTo(mouse.x,0); ctx.lineTo(mouse.x,h); ctx.stroke();
+    }
+    // update positions
+    for(const n of nodes){
+      n.pulse += 0.04;
+      n.x += n.vx * intensity;
+      n.y += n.vy * intensity;
+      // soft containment
+      if(n.x<0||n.x>w) n.vx*=-1;
+      if(n.y<0||n.y>h) n.vy*=-1;
+      // cursor influence — repel close nodes
+      if(mouse.active){
+        const dx = n.x - mouse.x, dy = n.y - mouse.y;
+        const d2 = dx*dx + dy*dy;
+        if(d2 < 160*160 && d2 > 1){
+          const d = Math.sqrt(d2);
+          const f = (160 - d) / 160;
+          n.vx += (dx/d) * f * 0.3 * intensity;
+          n.vy += (dy/d) * f * 0.3 * intensity;
+        }
+      }
+      // damping
+      n.vx *= 0.985; n.vy *= 0.985;
+      // gentle drift back toward random micromotion
+      n.vx += (Math.random()-0.5)*0.008;
+      n.vy += (Math.random()-0.5)*0.008;
+    }
+    // draw edges
+    const accent = getAccent();
+    for(let i=0;i<nodes.length;i++){
+      for(let j=i+1;j<nodes.length;j++){
+        const a = nodes[i], b = nodes[j];
+        const dx = a.x-b.x, dy = a.y-b.y;
+        const d2 = dx*dx+dy*dy;
+        if(d2 < LINK_DIST*LINK_DIST){
+          const d = Math.sqrt(d2);
+          const alpha = (1 - d/LINK_DIST) * 0.35;
+          // boost alpha near cursor
+          let cursorBoost = 0;
+          if(mouse.active){
+            const mx = (a.x+b.x)/2 - mouse.x;
+            const my = (a.y+b.y)/2 - mouse.y;
+            const md = Math.sqrt(mx*mx+my*my);
+            if(md<200) cursorBoost = (1 - md/200) * 0.6;
+          }
+          ctx.strokeStyle = `color-mix(in oklch, ${accent} ${(alpha+cursorBoost)*100}%, transparent)`;
+          ctx.lineWidth = a.hub||b.hub ? 1.0 : 0.6;
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+        }
+      }
+    }
+    // draw nodes
+    for(const n of nodes){
+      const pulse = 1 + Math.sin(n.pulse)*0.2;
+      const r = n.r * pulse;
+      // glow for hubs
+      if(n.hub){
+        ctx.fillStyle = `color-mix(in oklch, ${accent} 16%, transparent)`;
+        ctx.beginPath(); ctx.arc(n.x,n.y,r*5,0,Math.PI*2); ctx.fill();
+      }
+      ctx.fillStyle = n.hub ? accent : `color-mix(in oklch, ${accent} 75%, white)`;
+      ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2); ctx.fill();
+      // thin ring on cursor-near nodes
+      if(mouse.active){
+        const dx=n.x-mouse.x,dy=n.y-mouse.y;
+        if(dx*dx+dy*dy<60*60){
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = 0.7;
+          ctx.beginPath(); ctx.arc(n.x,n.y,r+3,0,Math.PI*2); ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  init();
+  requestAnimationFrame(tick);
+})();
+
+// ------ token-by-token console in hero (subtle loop) ------
+(function(){
+  const el = document.getElementById('console');
+  const messages = [
+    ['[query]', 'embed("fine-tune LLM with QLoRA")', false],
+    ['[ok]', '→ top-k=5 · pinecone hit · 23ms', 'ok'],
+    ['[agent]', 'crewai.run("research → summarize")', false],
+    ['[tool]', 'ran: retriever · rerank · summarize', 'ok'],
+    ['[warn]', 'rate limit · backing off 420ms', 'warn'],
+    ['[ok]', 'stream complete · tokens=428', 'ok'],
+  ];
+  let idx = 0;
+  function addLine(){
+    if(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--intensity')) < 0.2) {
+      setTimeout(addLine, 2000); return;
+    }
+    const [t, m, cls] = messages[idx % messages.length];
+    idx++;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="t">${t}</span><span class="m ${cls||''}">${''}</span>`;
+    el.appendChild(row);
+    const span = row.querySelector('.m');
+    // typewrite
+    let i = 0;
+    const iv = setInterval(()=>{
+      i++; span.textContent = m.slice(0,i);
+      if(i >= m.length) clearInterval(iv);
+    }, 18);
+    // keep list short
+    while(el.children.length > 5) el.removeChild(el.children[0]);
+    setTimeout(addLine, 2200);
+  }
+  setTimeout(addLine, 1800);
+})();
+
+// ------ TWEAKS host integration ------
+window.addEventListener('message', (e)=>{
+  const msg = e.data||{};
+  if(msg.type === '__activate_edit_mode'){ document.getElementById('tweaks').classList.add('on'); }
+  if(msg.type === '__deactivate_edit_mode'){ document.getElementById('tweaks').classList.remove('on'); }
+});
+window.parent.postMessage({type:'__edit_mode_available'}, '*');
+
+function persist(edits){
+  state = {...state, ...edits};
+  applyState();
+  window.parent.postMessage({type:'__edit_mode_set_keys', edits}, '*');
+}
+
+document.querySelectorAll('#swatches .sw').forEach(sw=>{
+  sw.addEventListener('click', ()=>{
+    document.querySelectorAll('#swatches .sw').forEach(s=>s.classList.remove('on'));
+    sw.classList.add('on');
+    persist({accentHue: parseFloat(sw.dataset.h)});
+  });
+});
+document.getElementById('motionSel').addEventListener('change', e=>persist({motion: parseFloat(e.target.value)}));
+document.getElementById('scanSel').addEventListener('change', e=>persist({scanlines: e.target.value}));
+
+// sync controls with state on init
+(function(){
+  const mSel = document.getElementById('motionSel');
+  mSel.value = String(state.motion);
+  document.getElementById('scanSel').value = state.scanlines;
+  document.querySelectorAll('#swatches .sw').forEach(s=>{
+    s.classList.toggle('on', parseFloat(s.dataset.h) === state.accentHue);
+  });
+})();
+
+// speaker/slide postMessage not needed
+</script>
+</body>
+</html>
